@@ -1,0 +1,67 @@
+--- /home/fireflyer/.nvm/versions/node/v22.23.2/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web/lib/index.js.bak-searxng	2026-08-29 19:24:10.583359092 +0800
++++ /home/fireflyer/.nvm/versions/node/v22.23.2/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web/lib/index.js	2026-08-29 19:32:47.374490011 +0800
+@@ -1,6 +1,14 @@
+ import { Service } from "@deepseek-ai/cordis";
+ import z from "@deepseek-ai/schemastery";
+ import { HarnessError } from "@deepseek-ai/dsh-llm";
++/**
++* Runtime-selected search provider, shared across EVERY WebRuntime instance
++* (the host plane and per-session scopes may each carry a `ctx.web`). A consumer
++* (e.g. the web-search settings panel) sets this once and every instance reads
++* the same value, so a switch is globally visible to every search.
++* `undefined` means "no explicit runtime override" — fall back to config/env.
++*/
++let runtimeSearchProviderId;
+ //#region lib/types/types.js
+ /**
+ * Vocabulary for the web capability seam (`ctx.web`). Search and fetch deliberately share one
+@@ -54,7 +62,7 @@
+ 	fetchProviderId;
+ 	constructor(ctx, config = {}) {
+ 		super(ctx, "web");
+-		this.searchProviderId = config.searchProvider ?? process.env.DSH_WEB_SEARCH_PROVIDER;
++		this.searchProviderId = runtimeSearchProviderId ?? config.searchProvider ?? process.env.DSH_WEB_SEARCH_PROVIDER;
+ 		this.fetchProviderId = config.fetchProvider ?? process.env.DSH_WEB_FETCH_PROVIDER;
+ 	}
+ 	/**
+@@ -86,6 +94,28 @@
+ 		return () => void dispose();
+ 	}
+ 	/**
++	* Dynamically switch which search provider the seam resolves. Lets a consumer
++	* (e.g. a web-search settings panel) change the provider without re-registering
++	* or restarting. Taking `void 0` clears the explicit selection so the normal
++	* single-usable-provider / ambiguity rules apply again.
++	* @param id - a registered search provider id, or `void 0` to clear.
++	*/
++	setSearchProviderId(id) {
++		runtimeSearchProviderId = id;
++		this.searchProviderId = id;
++	}
++	/** Resolve the currently pinned search provider id (may be `void 0`). */
++	currentSearchProviderId() {
++		return runtimeSearchProviderId ?? this.searchProviderId;
++	}
++	/** List the registered search providers and whether each is usable. */
++	listSearchProviders() {
++		return [...this.searchProviders.entries()].map(([id, provider]) => ({
++			id,
++			available: provider.available()
++		}));
++	}
++	/**
+ 	* Run one search through the selected provider. Resolves the provider at call
+ 	* time with the selection rules above; throws {@link WebError} when the
+ 	* capability cannot run. The seam enforces `request.maxResults` on the result:
+@@ -95,9 +125,10 @@
+ 	* @returns the provider's results, capped to `request.maxResults`.
+ 	*/
+ 	async search(request, signal) {
++		const providerId = runtimeSearchProviderId ?? this.searchProviderId;
+ 		return capSources(await resolveProvider({
+ 			providers: this.searchProviders,
+-			...this.searchProviderId !== void 0 ? { configuredId: this.searchProviderId } : {}
++			...providerId !== void 0 ? { configuredId: providerId } : {}
+ 		}).search(request, signal), request.maxResults);
+ 	}
+ 	/**

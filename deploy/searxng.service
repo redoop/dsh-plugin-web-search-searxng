@@ -1,0 +1,30 @@
+# SearXNG systemd service template.
+#
+# Copy to /etc/systemd/system/searxng.service and adjust the three
+# /home/fireflyer paths to your install, then:
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now searxng
+#
+[Unit]
+Description=SearXNG metasearch engine
+# SearXNG needs the network up before it can reach upstream search engines.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The user that owns ~/searxng and ~/searxng-venv.
+User=fireflyer
+WorkingDirectory=/home/fireflyer/searxng
+# Point at your instance settings.yml (contains secret_key, port, formats).
+Environment=SEARXNG_SETTINGS_PATH=/home/fireflyer/searxng-instance/settings.yml
+# The venv's searxng-run launcher; it reads server.bind_address/server.port
+# from the settings.yml above.
+ExecStart=/home/fireflyer/searxng-venv/bin/searxng-run
+# Never leave the search backend down; restart on crash with a short backoff.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
