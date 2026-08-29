@@ -1,0 +1,14 @@
+# dsh-plugin-web-search-searxng bundle patch:
+#
+# 1. Insert the plugin row so the loader activates this module (which registers
+#    the `searxng` search provider on `ctx.web`).
+# 2. Pin the ctx.web search provider to that provider. A patch replaces the
+#    targeted row's WHOLE config, so the `web` row restates every key the base
+#    row owns (only searchProvider today).
+- insert:
+    - id: web-search-searxng
+      name: 'dsh-plugin-web-search-searxng'
+
+- id: web
+  config:
+    searchProvider: searxng
